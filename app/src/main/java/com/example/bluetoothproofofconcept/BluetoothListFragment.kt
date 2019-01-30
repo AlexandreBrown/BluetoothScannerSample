@@ -1,59 +1,88 @@
 package com.example.bluetoothproofofconcept
 
+import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
 import android.content.Context
-import android.net.Uri
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Bundle
+import android.support.v4.app.ActivityCompat
 import android.support.v4.app.Fragment
+import android.support.v4.content.ContextCompat
 import android.support.v7.widget.LinearLayoutManager
-import android.support.v7.widget.RecyclerView
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import kotlinx.android.synthetic.main.content_bluetooth_list.*
 
 
-// TODO: Rename parameter arguments, choose names that match
-// the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
-private const val ARG_PARAM1 = "param1"
-private const val ARG_PARAM2 = "param2"
-
-/**
- * A simple [Fragment] subclass.
- * Activities that contain this fragment must implement the
- * [BluetoothListFragment.OnFragmentInteractionListener] interface
- * to handle interaction events.
- * Use the [BluetoothListFragment.newInstance] factory method to
- * create an instance of this fragment.
- *
- */
 class BluetoothListFragment : Fragment() {
     private var listener: OnFragmentInteractionListener? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    private val filter by lazy {
+        val filter = IntentFilter()
+        filter.addAction(BluetoothDevice.ACTION_FOUND)
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+        filter
+    }
 
+    private val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action
+
+            if (BluetoothAdapter.ACTION_DISCOVERY_STARTED == action) {
+                Log.i("bluetooth", "discovery started")
+            } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED == action) {
+                Log.i("bluetooth", "discovery finished")
+
+            }
+
+            if (BluetoothDevice.ACTION_FOUND == action) {
+                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+
+                DataManager.devices.add(BluetoothDeviceModel(device.name ?: device.address))
+
+                (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
+            }
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        requireContext().registerReceiver(bluetoothReceiver, filter)
+
         refresh.setOnClickListener {
-            Log.d("test","fragment")
+            Log.d("bluetooth","reached fragment")
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(requireActivity(), arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), 123)
+            }
+            val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+
+            if (!bluetoothAdapter.isEnabled)
+                bluetoothAdapter.enable()
+
+            DataManager.devices.clear()
+
+            bluetoothAdapter.startDiscovery()
+
             onButtonPressed()
         }
 
         items.layoutManager = LinearLayoutManager(context)
 
-        val devices = Bluetooth.getDiscoverableDevices()
-
-        items.adapter = BluetoothRecyclerAdapter(this.requireContext(), devices)
+        items.adapter = BluetoothRecyclerAdapter(this.requireContext(), DataManager.devices)
     }
 
     override fun onResume() {
         super.onResume()
-
+        requireContext().registerReceiver(bluetoothReceiver, filter)
         items.adapter?.notifyDataSetChanged()
     }
 
@@ -83,18 +112,9 @@ class BluetoothListFragment : Fragment() {
         listener = null
     }
 
-    /**
-     * This interface must be implemented by activities that contain this
-     * fragment to allow an interaction in this fragment to be communicated
-     * to the activity and potentially other fragments contained in that
-     * activity.
-     *
-     *
-     * See the Android Training lesson [Communicating with Other Fragments]
-     * (http://developer.android.com/training/basics/fragments/communicating.html)
-     * for more information.
-     */
     interface OnFragmentInteractionListener {
         fun onUpdateBluetoothDevices()
     }
+
+
 }

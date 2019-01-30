@@ -5,6 +5,7 @@ import android.support.v7.widget.RecyclerView
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import kotlinx.android.synthetic.main.item_bluetooth_list.view.*
 
 class BluetoothRecyclerAdapter(private val context: Context, private val devices: List<Device>) : RecyclerView.Adapter<BluetoothRecyclerAdapter.ViewHolder>() {
@@ -21,12 +22,10 @@ class BluetoothRecyclerAdapter(private val context: Context, private val devices
     override fun getItemCount() = devices.size
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.id.text = devices[position].id.toString()
-        holder.desc.text = devices[position].description
+        holder.name.text = devices[position].name
     }
 
     class ViewHolder(itemView: View): RecyclerView.ViewHolder(itemView){
-        val id = itemView.deviceId
-        val desc = itemView.deviceDescription
+        val name: TextView = itemView.deviceName
     }
 }

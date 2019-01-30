@@ -7,7 +7,7 @@ import android.widget.Toast
 
 class MainActivity : AppCompatActivity(), BluetoothListFragment.OnFragmentInteractionListener {
     override fun onUpdateBluetoothDevices() {
-        Log.d("test","activity")
+        Log.d("bluetooth","reached activity")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
