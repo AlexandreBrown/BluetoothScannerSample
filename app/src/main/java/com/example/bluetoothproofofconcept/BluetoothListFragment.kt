@@ -1,14 +1,8 @@
 package com.example.bluetoothproofofconcept
 
 import android.Manifest
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothSocket
-import android.content.BroadcastReceiver
-import android.content.ContentValues.TAG
+import android.app.Activity.RESULT_OK
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.support.v4.app.ActivityCompat
@@ -20,162 +14,47 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import io.palaima.smoothbluetooth.Device
+import io.palaima.smoothbluetooth.SmoothBluetooth
 import kotlinx.android.synthetic.main.content_bluetooth_list.*
-import java.io.IOException
-import java.util.*
-import android.system.Os.socket
+import android.content.Intent
+import android.bluetooth.BluetoothAdapter
 
 
 
 
-class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
+
+
+class BluetoothListFragment : Fragment(), onBluetoothItemInteraction, SmoothBluetooth.Listener {
 
     private var listener: OnFragmentInteractionListener? = null
 
-    private var selectedDevice: BluetoothDevice? = null
+    private val ENABLE_BT_REQUEST = 1
 
-    private var bluetoothDevices: MutableList<BluetoothDevice> = mutableListOf()
-
-    private val BluetoothUuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
-
-    private var socket: BluetoothSocket? = null
-
-    private val filter by lazy {
-        val filter = IntentFilter()
-        filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
-        filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
-        filter.addAction(BluetoothDevice.ACTION_FOUND)
-        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
-        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
-        filter
-    }
-    private val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-
-        override fun onReceive(context: Context, intent: Intent) {
-            val action = intent.action
-
-            when (action) {
-                BluetoothDevice.ACTION_ACL_CONNECTED -> //Do something if connected
-                    Toast.makeText(context, "Connected", Toast.LENGTH_SHORT).show()
-                BluetoothDevice.ACTION_ACL_DISCONNECTED -> //Do something if connected
-                    Toast.makeText(context, "Disconnected", Toast.LENGTH_SHORT).show()
-                BluetoothAdapter.ACTION_DISCOVERY_STARTED -> {
-                    Toast.makeText(requireContext(), "Searching for devices...", Toast.LENGTH_SHORT).show()
-                    refresh.isEnabled = false
-                }
-                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
-                    refresh.isEnabled = true
-                    loadingSpinner.visibility = View.GONE
-                }
-                BluetoothDevice.ACTION_FOUND ->{
-                    val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-
-                    if(device.name != null && device.address != null){
-                        val deviceWithSameAddress = DataManager.devices.find { it.address == device.address }
-                        val deviceName: String = if(device.bondState == BluetoothDevice.BOND_BONDED)
-                            "(PAIRED) ${device.name}"
-                        else
-                            device.name
-
-                        if(deviceWithSameAddress == null){
-                            DataManager.devices.add(BluetoothDeviceModel(deviceName, device.address))
-                            bluetoothDevices.add(device) // very inefficient, only for proof of concept
-                        }
-                        else{
-                            DataManager.devices[DataManager.devices.indexOf(deviceWithSameAddress)].name = deviceName
-                        }
-
-                        (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
-
-                        if(device.name.toLowerCase().contains("s8"))
-                        {
-                            selectedDevice = device
-                            pairAndConnectSelectedDevice()
-                        }
-
-                    }
-                }
-            }
-        }
+    private val smoothBluetooth: SmoothBluetooth by lazy {
+        val smoothBluetooth = SmoothBluetooth(requireContext())
+        smoothBluetooth.setListener(this)
+        smoothBluetooth
     }
 
     override fun onClick(deviceAddress: String) {
-        selectedDevice = bluetoothDevices.first { it.address == deviceAddress }
 
-        pairAndConnectSelectedDevice()
-    }
-
-    private fun pairAndConnectSelectedDevice(){
-        Toast.makeText(requireContext(), "Attempting communication with ${selectedDevice?.name}", Toast.LENGTH_SHORT).show()
-
-        if(selectedDevice?.bondState == BluetoothDevice.BOND_NONE) {
-            tryToPairSelectedDevice()
-        }else{
-            connectSelectedPairedDevice()
-        }
-    }
-
-    private fun tryToPairSelectedDevice(){
-        if (selectedDevice?.createBond() == true) {
-            Toast.makeText(requireContext(), "Devices successfully paired", Toast.LENGTH_SHORT).show()
-            connectSelectedPairedDevice()
-        } else {
-            Toast.makeText(requireContext(), "Devices failed pairing", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun connectSelectedPairedDevice(){
-        try {
-            Toast.makeText(requireContext(), "Connecting to ${selectedDevice?.name}", Toast.LENGTH_SHORT).show()
-
-//            socket = selectedDevice?.javaClass?.getMethod("createRfcommSocket",
-//                Int::class.javaPrimitiveType
-//            )?.invoke(selectedDevice, 1) as BluetoothSocket
-
-
-            socket = selectedDevice?.createInsecureRfcommSocketToServiceRecord(BluetoothUuid)
-        } catch (e1: IOException) {
-            Log.d(TAG, "socket not created")
-            Toast.makeText(requireContext(), "socket not created", Toast.LENGTH_SHORT).show()
-            e1.printStackTrace()
-        }
-
-        try {
-            if(socket?.isConnected == true)
-                socket?.close()
-
-            socket?.connect()
-
-        } catch (e: IOException) {
-            try {
-                socket?.close()
-            } catch (e1: IOException) {
-                e1.printStackTrace()
-            }
-        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        requireContext().registerReceiver(bluetoothReceiver, filter)
-
         refresh.setOnClickListener {
+
+            DataManager.devices.clear()
+            loadingSpinner.visibility = View.VISIBLE
+            refresh.isEnabled = false
+
             if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(requireActivity(), arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), 123)
             }
-            val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
 
-            if (!bluetoothAdapter.isEnabled)
-                bluetoothAdapter.enable()
-
-            DataManager.devices.clear()
-
-            loadingSpinner.visibility = View.VISIBLE
-
-            if(bluetoothAdapter.isDiscovering)
-                bluetoothAdapter.cancelDiscovery()
-            bluetoothAdapter.startDiscovery()
+            smoothBluetooth?.doDiscovery()
             onButtonPressed()
         }
 
@@ -187,16 +66,104 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         items.adapter = adapter
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == ENABLE_BT_REQUEST) {
+            if (resultCode == RESULT_OK) {
+                smoothBluetooth.tryConnection()
+            }else{
+                loadingSpinner.visibility = View.GONE
+                refresh.isEnabled = true    
+            }
+        }
+    }
+
+    override fun onDevicesFound(
+        deviceList: MutableList<Device>?,
+        connectionCallback: SmoothBluetooth.ConnectionCallback?
+    ) {
+        Log.d("test","onDevicesFound")
+
+        deviceList?.forEach {
+            if(it.name != null && it.address !== null)
+                DataManager.devices.add(BluetoothDeviceModel(it.name , it.address))
+        }
+
+        (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
+    }
+
+    override fun onDiscoveryFinished() {
+        Log.d("test","onDiscoveryFinished")
+        loadingSpinner.visibility = View.GONE
+        refresh.isEnabled = true
+    }
+
+    override fun onConnecting(device: Device?) {
+        Log.d("test","onConnecting")
+        Toast.makeText(requireContext(), "Connecting to ${device?.name}", Toast.LENGTH_SHORT).show()
+
+    }
+
+    override fun onDataReceived(data: Int) {
+        Log.d("test","onDataReceived")
+        Toast.makeText(requireContext(), "Data received!", Toast.LENGTH_SHORT).show()
+
+    }
+
+    override fun onBluetoothNotSupported() {
+        Log.d("test","onBluetoothNotSupported")
+        Toast.makeText(requireContext(), "Bluetooth not found", Toast.LENGTH_SHORT).show();
+        requireActivity().finish()
+    }
+
+    override fun onBluetoothNotEnabled() {
+        Log.d("test","onBluetoothNotEnabled")
+        val enableBluetooth = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+        startActivityForResult(enableBluetooth, ENABLE_BT_REQUEST)
+    }
+
+    override fun onConnected(device: Device?) {
+        Log.d("test","onConnected")
+        Toast.makeText(requireContext(), "Connected to ${device?.name}", Toast.LENGTH_SHORT).show()
+
+    }
+
+    override fun onDiscoveryStarted() {
+        Log.d("test","onDiscoveryStarted")
+        Toast.makeText(requireContext(), "Searching for devices...", Toast.LENGTH_SHORT).show()
+
+    }
+
+    override fun onConnectionFailed(device: Device?) {
+        Log.d("test","onConnectionFailed")
+        Toast.makeText(requireContext(), "Failed to connect to ${device?.name}", Toast.LENGTH_SHORT).show()
+
+        if(device?.isPaired == true){
+            smoothBluetooth.doDiscovery()
+        }
+
+    }
+
+    override fun onDisconnected() {
+        Log.d("test","onDisconnected")
+        Toast.makeText(requireContext(), "Disconnected", Toast.LENGTH_SHORT).show()
+
+    }
+
+    override fun onNoDevicesFound() {
+        Log.d("test","onNoDevicesFound")
+        Toast.makeText(requireContext(), "No device found!", Toast.LENGTH_SHORT).show()
+
+    }
+
     override fun onResume() {
         super.onResume()
-        requireContext().registerReceiver(bluetoothReceiver, filter)
         items.adapter?.notifyDataSetChanged()
     }
 
     override fun onPause() {
         super.onPause()
-        socket?.close()
-        requireContext().unregisterReceiver(bluetoothReceiver)
+        smoothBluetooth.stop()
     }
 
 
