@@ -1,10 +1,11 @@
 package com.example.bluetoothproofofconcept
 
 import android.Manifest
-import android.app.Activity.RESULT_OK
-import android.bluetooth.BluetoothDevice
+import android.bluetooth.*
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.support.v4.app.ActivityCompat
@@ -17,145 +18,176 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import kotlinx.android.synthetic.main.content_bluetooth_list.*
-import me.aflak.bluetooth.Bluetooth
-import me.aflak.bluetooth.BluetoothCallback
-import me.aflak.bluetooth.DeviceCallback
-import me.aflak.bluetooth.DiscoveryCallback
+import java.io.IOException
 import java.util.*
+import java.lang.Exception
+import android.bluetooth.BluetoothAdapter
+import android.os.ParcelUuid
+import android.os.Parcelable
 
 
 class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
     private var listener: OnFragmentInteractionListener? = null
 
-    private var bluetooth: Bluetooth? = null
+    private var selectedDevice: BluetoothDevice? = null
 
-    private val enableBtRequest = 1
+    private var bluetoothDevices: MutableList<BluetoothDevice> = mutableListOf()
 
-    private val bluetoothCallback = object : BluetoothCallback {
-        override fun onBluetoothTurningOn() {
-            Log.d("test","onBluetoothTurningOn")
-        }
+    private val bluetoothUuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
 
-        override fun onBluetoothOn() {
-            Log.d("test","onBluetoothOn")
-        }
+    private var bluetoothAdapter: BluetoothAdapter? = null
 
-        override fun onBluetoothTurningOff() {
-            Log.d("test","onBluetoothTurningOff")
-        }
+    private var socket: BluetoothSocket? = null
 
-        override fun onBluetoothOff() {
-            Log.d("test","onBluetoothOff")
-        }
-
-        override fun onUserDeniedActivation() {
-            Log.d("test","onUserDeniedActivation")
-        }
+    private val filter by lazy {
+        val filter = IntentFilter()
+        filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+        filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+        filter.addAction(BluetoothDevice.ACTION_FOUND)
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+        filter.addAction(BluetoothDevice.ACTION_UUID)
+        filter
     }
+    private val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
 
-    private val discoveryCallback = object : DiscoveryCallback {
-        override fun onDiscoveryStarted() {
-            Log.d("test","onDiscoveryStarted")
-            Toast.makeText(requireContext(),"Searching devices...", Toast.LENGTH_SHORT).show()
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action
 
-            DataManager.devices.clear()
-            loadingSpinner.visibility = View.VISIBLE
-            refresh.isEnabled = false
-        }
+            when (action) {
+                BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                    //Do something if connected
+                    Log.d("test","Connected")
 
-        override fun onDiscoveryFinished() {
-            Log.d("test","onDiscoveryFinished")
+                    val device = intent.getParcelableArrayExtra(BluetoothDevice.EXTRA_DEVICE)
 
-            loadingSpinner.visibility = View.GONE
-            refresh.isEnabled = true
-        }
 
-        override fun onDeviceFound(device: BluetoothDevice) {
-            Log.d("test","onDeviceFound : ${device.name} ${device.type}")
+                    val uuidExtra = intent.getParcelableArrayExtra(BluetoothDevice.ACTION_UUID)
 
-            if(device.name != null && device.address != null)
-            {
-                DataManager.devices.add(BluetoothDeviceModel(device.name,device.address))
-
-                (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
-
-                if(device.name.toLowerCase().contains("Xps".toLowerCase())){
-                    bluetooth?.pair(device)
-                    //bluetooth?.connectToDevice(device)
+                    Log.d("test","uuid null ? : ${uuidExtra == null}")
                 }
 
+                BluetoothDevice.ACTION_ACL_DISCONNECTED -> //Do something if connected
+                    Log.d("test","Disconnected")
+                BluetoothAdapter.ACTION_DISCOVERY_STARTED -> {
+                    Log.d("test","DISCOVERY_STARTED")
+                    Toast.makeText(requireContext(), "Searching for devices...", Toast.LENGTH_SHORT).show()
+                    refresh.isEnabled = false
+                }
+                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
+                    Log.d("test","DISCOVERY_FINISHED")
+                    refresh.isEnabled = true
+                    loadingSpinner.visibility = View.GONE
+                }
+                BluetoothDevice.ACTION_UUID ->{
+                    Log.d("test","ACTION_UUID")
+                }
+
+                BluetoothDevice.ACTION_FOUND ->{
+                    val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+
+                    if(device.name != null && device.address != null){
+
+                        DataManager.devices.add(BluetoothDeviceModel(device.name, device.address))
+
+                        (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
+
+                        if(device.name.toLowerCase().contains("mdbt_03_7398"))
+                        {
+                            Log.d("test","Found the device you were looking for : ${device.name}")
+
+                            selectedDevice = device
+                            pairAndConnectSelectedDevice()
+                        }
+
+                    }
+                }
             }
         }
-
-        override fun onDevicePaired(device: BluetoothDevice) {
-            Log.d("test","onDevicePaired")
-            Toast.makeText(requireContext(),"${device.name} paired", Toast.LENGTH_SHORT).show()
-        }
-
-        override fun onDeviceUnpaired(device: BluetoothDevice) {
-            Log.d("test","onDeviceUnpaired")
-            Toast.makeText(requireContext(),"${device.name} unpaired", Toast.LENGTH_SHORT).show()
-        }
-
-        override fun onError(message: String?) {
-            Log.d("test","onError $message")
-        }
     }
 
-    private val deviceCallback = object : DeviceCallback {
-        override fun onDeviceConnected(device: BluetoothDevice) {
-            Log.d("test","onDeviceConnected ${device.name}")
-            Toast.makeText(requireContext(),"${device.name} connected", Toast.LENGTH_SHORT).show()
-        }
-
-        override fun onDeviceDisconnected(device: BluetoothDevice, message: String) {
-            Log.d("test","onDeviceDisconnected ${device.name}")
-            Toast.makeText(requireContext(),"${device.name} disconnected", Toast.LENGTH_SHORT).show()
-        }
-
-        override fun onMessage(message: String) {
-            Log.d("test","onMessage $message")
-        }
-
-        override fun onError(message: String) {
-            Log.d("test","onError $message")
-        }
-
-        override fun onConnectError(device: BluetoothDevice, message: String) {
-            Log.d("test","onConnectError ${device.name} $message")
-        }
-    }
     override fun onClick(deviceAddress: String) {
+        selectedDevice = bluetoothDevices.first { it.address == deviceAddress }
 
+        pairAndConnectSelectedDevice()
     }
 
-    override fun onStart() {
-        super.onStart()
-        bluetooth = Bluetooth(requireContext())
-        bluetooth?.setBluetoothCallback(bluetoothCallback)
-        bluetooth?.setDiscoveryCallback(discoveryCallback)
-        bluetooth?.setDeviceCallback(deviceCallback)
-        bluetooth?.onStart()
-        bluetooth?.enable()
+    private fun pairAndConnectSelectedDevice(){
+        Toast.makeText(requireContext(), "Attempting communication with ${selectedDevice?.name}", Toast.LENGTH_SHORT).show()
+        Log.d("test","Attempting communication with ${selectedDevice?.name}")
+
+        if(selectedDevice?.bondState == BluetoothDevice.BOND_NONE) {
+            Log.d("test","${selectedDevice?.name} was not already paired")
+
+            tryToPairSelectedDevice()
+        }else{
+            Log.d("test","${selectedDevice?.name} was already paired")
+
+            connectSelectedPairedDevice()
+        }
     }
 
-    override fun onPause() {
-        super.onPause()
-        bluetooth?.onStop()
+    private fun tryToPairSelectedDevice(){
+        if (selectedDevice?.createBond() == true) {
+            Log.d("test","${selectedDevice?.name} paired successfully!")
+
+            connectSelectedPairedDevice()
+        } else {
+            Log.d("test","${selectedDevice?.name} failed pairing!")
+        }
+    }
+
+    private fun connectSelectedPairedDevice(){
+        try {
+            val method = selectedDevice?.javaClass?.getMethod("getUuids")
+            val parcelUuids: Array<ParcelUuid>  = method?.invoke(selectedDevice) as Array<ParcelUuid>
+            val uuid = parcelUuids[0]
+            Log.d("test","creating a socket with uuid : ${uuid.uuid}")
+
+            socket = selectedDevice?.createRfcommSocketToServiceRecord(uuid.uuid)
+
+            Log.d("test","Attempting connection to socket")
+
+            socket?.connect()
+        } catch (exception: IOException) {
+            Log.d("test","Connection to socket failed, ${exception.message}")
+//
+//            if(selectedDevice != null){
+//                try {
+//                    Log.d("test","Attempting connection to socket using reflection")
+//                    socket?.connect()
+//                }catch (e: Exception){
+//                    Log.d("test","Connection to socket failed using reflection, ${e.message}")
+//                }
+//            }
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+
+        requireContext().registerReceiver(bluetoothReceiver, filter)
+
         refresh.setOnClickListener {
             if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(requireActivity(), arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), enableBtRequest)
-            }else {
-                bluetooth?.startScanning()
+                ActivityCompat.requestPermissions(requireActivity(), arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), 123)
             }
 
-            onRefreshActivityCallback()
+            if (bluetoothAdapter?.isEnabled == false)
+                bluetoothAdapter?.enable()
+
+            DataManager.devices.clear()
+
+            loadingSpinner.visibility = View.VISIBLE
+
+            if(bluetoothAdapter?.isDiscovering == true)
+                bluetoothAdapter?.cancelDiscovery()
+
+            bluetoothAdapter?.startDiscovery()
+            onButtonPressed()
         }
 
         items.layoutManager = LinearLayoutManager(context)
@@ -166,58 +198,30 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         items.adapter = adapter
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == enableBtRequest) {
-            if (resultCode == RESULT_OK) {
-                bluetooth?.startScanning()
-            }else{
-                loadingSpinner.visibility = View.GONE
-                refresh.isEnabled = true
-            }
-        }
-    }
-
-//
-//    override fun onDevicesFound(
-//        deviceList: MutableList<Device>?,
-//        connectionCallback: SmoothBluetooth.ConnectionCallback?
-//    ) {
-//        Log.d("test","onDevicesFound")
-//
-//        deviceList?.forEach {
-//            if(it.name != null && it.address !== null)
-//            {
-//                DataManager.devices.add(BluetoothDeviceModel(if(it.isPaired) "(PAIRED) ${it.name}" else it.name , it.address))
-////                if(it.name.toLowerCase().contains(("XPS").toLowerCase())){
-////                    connectionCallback?.connectTo(it)
-////                }
-//            }
-//        }
-//
-//        (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
-//    }
-//
-//    override fun onDiscoveryFinished() {
-//        Log.d("test","onDiscoveryFinished")
-//        loadingSpinner.visibility = View.GONE
-//        refresh.isEnabled = true
-//    }
-
     override fun onResume() {
         super.onResume()
+        requireContext().registerReceiver(bluetoothReceiver, filter)
         items.adapter?.notifyDataSetChanged()
     }
 
+    override fun onPause() {
+        super.onPause()
+        socket?.close()
+        if(bluetoothAdapter?.isDiscovering == true)
+            bluetoothAdapter?.cancelDiscovery()
+        requireContext().unregisterReceiver(bluetoothReceiver)
+    }
+
+
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
+            inflater: LayoutInflater, container: ViewGroup?,
+            savedInstanceState: Bundle?
     ): View? {
 
         return inflater.inflate(R.layout.content_bluetooth_list, container, false)
     }
 
-    private fun onRefreshActivityCallback() {
+    private fun onButtonPressed() {
         listener?.onUpdateBluetoothDevices()
     }
 
@@ -238,4 +242,6 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
     interface OnFragmentInteractionListener {
         fun onUpdateBluetoothDevices()
     }
+
+
 }
