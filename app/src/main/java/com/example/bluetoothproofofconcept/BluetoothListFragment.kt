@@ -19,11 +19,12 @@ import io.palaima.smoothbluetooth.SmoothBluetooth
 import kotlinx.android.synthetic.main.content_bluetooth_list.*
 import android.content.Intent
 import android.bluetooth.BluetoothAdapter
-
-
-
-
-
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothSocket
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import java.io.IOException
+import java.util.*
 
 class BluetoothListFragment : Fragment(), onBluetoothItemInteraction, SmoothBluetooth.Listener {
 
@@ -37,25 +38,119 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction, SmoothBlue
         smoothBluetooth
     }
 
+    private var socket: BluetoothSocket? = null
+
+    private val filter by lazy {
+        val filter = IntentFilter()
+        filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+        filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+        filter.addAction(BluetoothDevice.ACTION_FOUND)
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+        filter
+    }
+
     override fun onClick(deviceAddress: String) {
 
+    }
+
+    private val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action
+
+            when (action) {
+                BluetoothDevice.ACTION_ACL_CONNECTED -> //Do something if connected
+                    Log.d("test","ACTION_ACL_CONNECTED")
+                BluetoothDevice.ACTION_ACL_DISCONNECTED -> //Do something if connected
+                    Log.d("test","ACTION_ACL_DISCONNECTED")
+                BluetoothAdapter.ACTION_DISCOVERY_STARTED -> {
+                    Log.d("test","ACTION_DISCOVERY_STARTED")
+                }
+                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
+                    Log.d("test","ACTION_DISCOVERY_FINISHED")
+                }
+                BluetoothDevice.ACTION_FOUND ->{
+
+                    Log.d("test","ACTION_FOUND")
+
+                    val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+
+                    if(device.name != null && device.address != null){
+                        if(device.name.toLowerCase().contains("xps")){
+                            pairDevice(device)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun pairDevice(device: BluetoothDevice){
+        if(device.bondState == BluetoothDevice.BOND_NONE) {
+            if (device.createBond()) {
+                Log.d("test","Successfully paired")
+                //connectDevice(device)
+            }else{
+                Log.d("test","Failed pairing")
+            }
+        }else{
+            Log.d("test","${device.name} was already paired")
+            //connectDevice(device)
+        }
+    }
+
+    private fun connectDevice(device: BluetoothDevice){
+        try {
+            Log.d("test","Connecting to ${device.name}")
+
+//            socket = selectedDevice?.javaClass?.getMethod("createRfcommSocket",
+//                Int::class.javaPrimitiveType
+//            )?.invoke(selectedDevice, 1) as BluetoothSocket
+
+
+            socket = device.createInsecureRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805f9b34fb"))
+
+        } catch (e1: IOException) {
+            Log.d("test", "socket not created")
+            e1.printStackTrace()
+        }
+
+        try {
+            socket?.connect()
+        } catch (e: IOException) {
+            try {
+                socket?.close()
+            } catch (e1: IOException) {
+                e1.printStackTrace()
+            }
+        }
+    }
+
+    private fun launchDiscovery(){
+        DataManager.devices.clear()
+        loadingSpinner.visibility = View.VISIBLE
+        refresh.isEnabled = false
+
+        smoothBluetooth.doDiscovery()
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        requireContext().registerReceiver(bluetoothReceiver, filter)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
         refresh.setOnClickListener {
-
-            DataManager.devices.clear()
-            loadingSpinner.visibility = View.VISIBLE
-            refresh.isEnabled = false
-
             if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(requireActivity(), arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), 123)
+                ActivityCompat.requestPermissions(requireActivity(), arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), ENABLE_BT_REQUEST)
+            }else {
+                launchDiscovery()
             }
 
-            smoothBluetooth?.doDiscovery()
-            onButtonPressed()
+            onRefresh()
         }
 
         items.layoutManager = LinearLayoutManager(context)
@@ -70,10 +165,10 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction, SmoothBlue
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == ENABLE_BT_REQUEST) {
             if (resultCode == RESULT_OK) {
-                smoothBluetooth.tryConnection()
+                launchDiscovery()
             }else{
                 loadingSpinner.visibility = View.GONE
-                refresh.isEnabled = true    
+                refresh.isEnabled = true
             }
         }
     }
@@ -86,7 +181,12 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction, SmoothBlue
 
         deviceList?.forEach {
             if(it.name != null && it.address !== null)
-                DataManager.devices.add(BluetoothDeviceModel(it.name , it.address))
+            {
+                DataManager.devices.add(BluetoothDeviceModel(if(it.isPaired) "(PAIRED) ${it.name}" else it.name , it.address))
+//                if(it.name.toLowerCase().contains(("XPS").toLowerCase())){
+//                    connectionCallback?.connectTo(it)
+//                }
+            }
         }
 
         (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
@@ -136,12 +236,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction, SmoothBlue
 
     override fun onConnectionFailed(device: Device?) {
         Log.d("test","onConnectionFailed")
-        Toast.makeText(requireContext(), "Failed to connect to ${device?.name}", Toast.LENGTH_SHORT).show()
-
-        if(device?.isPaired == true){
-            smoothBluetooth.doDiscovery()
-        }
-
+        Toast.makeText(requireContext(), "Failed to connect to ${device?.name}, device pairing : ${device?.isPaired}", Toast.LENGTH_SHORT).show()
     }
 
     override fun onDisconnected() {
@@ -175,7 +270,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction, SmoothBlue
         return inflater.inflate(R.layout.content_bluetooth_list, container, false)
     }
 
-    fun onButtonPressed() {
+    private fun onRefresh() {
         listener?.onUpdateBluetoothDevices()
     }
 
@@ -196,6 +291,4 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction, SmoothBlue
     interface OnFragmentInteractionListener {
         fun onUpdateBluetoothDevices()
     }
-
-
 }
