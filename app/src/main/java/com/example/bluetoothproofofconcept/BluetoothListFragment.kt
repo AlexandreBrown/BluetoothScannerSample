@@ -43,6 +43,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
     private val filter by lazy {
         val filter = IntentFilter()
         filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+        filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
         filter.addAction(BluetoothDevice.ACTION_FOUND)
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
@@ -56,6 +57,8 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
             when (action) {
                 BluetoothDevice.ACTION_ACL_CONNECTED -> //Do something if connected
                     Toast.makeText(context, "Connected", Toast.LENGTH_SHORT).show()
+                BluetoothDevice.ACTION_ACL_DISCONNECTED -> //Do something if connected
+                    Toast.makeText(context, "Disconnected", Toast.LENGTH_SHORT).show()
                 BluetoothAdapter.ACTION_DISCOVERY_STARTED -> {
                     Toast.makeText(requireContext(), "Searching for devices...", Toast.LENGTH_SHORT).show()
                     refresh.isEnabled = false
@@ -170,6 +173,8 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
             loadingSpinner.visibility = View.VISIBLE
 
+            if(bluetoothAdapter.isDiscovering)
+                bluetoothAdapter.cancelDiscovery()
             bluetoothAdapter.startDiscovery()
             onButtonPressed()
         }
