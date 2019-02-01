@@ -29,7 +29,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
     private var listener: OnFragmentInteractionListener? = null
 
-    private val enableBtRequest = 123
+    private val enableBtRequestCode = 123
 
     private var selectedDevice: BluetoothDevice? = null
 
@@ -41,7 +41,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
     private var socket: BluetoothSocket? = null
 
-    private val autoConnectBluetoothDeviceName = "mdBT_3_0290"
+    private val autoConnectBluetoothDeviceName = "pie"
 
     private val autoPairing = true
 
@@ -52,6 +52,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         filter.addAction(BluetoothDevice.ACTION_FOUND)
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+        filter.addAction(BluetoothDevice.ACTION_UUID)
         filter
     }
 
@@ -64,7 +65,8 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
             when (action) {
                 BluetoothDevice.ACTION_ACL_CONNECTED -> {
-                    Log.d(debugTag,"Connected")
+                    val device = getBluetoothDeviceFromIntent(intent)
+                    Log.d(debugTag,"Connected to ${device.name}")
 
                     Toast.makeText(requireContext(), "Connected to ${selectedDevice?.name}", Toast.LENGTH_SHORT).show()
                 }
@@ -82,6 +84,16 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                     Log.d(debugTag,"DISCOVERY_FINISHED")
 
+                    bluetoothDevices.forEach {
+                        Log.d(debugTag,"Device ${it.name} has these UUIDs :")
+
+                        val uuids = it.uuids
+                        if(uuids != null){
+                            for (i in uuids){
+                                Log.d(debugTag,"UUID : $i")
+                            }
+                        }
+                    }
                     showDiscoveryNotInProgress()
                 }
 
@@ -93,7 +105,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
                         addDeviceToList(device)
 
-                        if(autoPairing){
+                        if(!autoPairing){
                             if(bluetoothDeviceMatchesCriterias(device))
                             {
                                 Log.d(debugTag,"Found the device you were looking, device name : ${device.name}")
@@ -109,23 +121,25 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         }
     }
 
+    private fun getUUIDsOfDeviceFromIntent(intent: Intent) =
+        intent.getParcelableArrayExtra(BluetoothDevice.EXTRA_UUID)
+
     private fun bluetoothDeviceMatchesCriterias(device: BluetoothDevice) =
             device.name.toLowerCase().contains(autoConnectBluetoothDeviceName.toLowerCase())
 
     private fun addDeviceToList(device: BluetoothDevice) {
-        DataManager.devices.add(BluetoothDeviceModel(device.name, device.address))
+        if(!DataManager.devices.contains(BluetoothDeviceModel(device.name,device.address)))
+        {
+            DataManager.devices.add(BluetoothDeviceModel(device.name, device.address))
 
-        (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
+            bluetoothDevices.add(device)
+
+            (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
+        }
     }
 
     private fun getBluetoothDeviceFromIntent(intent: Intent) =
             intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-
-    private fun showDiscoveryNotInProgress() {
-        refresh.isEnabled = true
-
-        loadingSpinner.visibility = View.GONE
-    }
 
     override fun onClick(deviceAddress: String) {
         selectedDevice = bluetoothDevices.first { it.address == deviceAddress }
@@ -136,10 +150,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
     private fun pairAndConnectSelectedDevice(){
         Log.d(debugTag,"Attempting communication with ${selectedDevice?.name}")
 
-        if(bluetoothAdapter?.isDiscovering == true){
-            Log.d(debugTag,"Cancelling discovery...")
-            bluetoothAdapter?.cancelDiscovery()
-        }
+        cancelDiscoveryIfAlreadyInProgress()
 
         if(selectedDeviceIsNotPaired()) {
             Log.d(debugTag,"${selectedDevice?.name} was not already paired")
@@ -172,7 +183,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
             socket = selectedDevice?.createRfcommSocketToServiceRecord(bluetoothUuid)
 
-            Log.d(debugTag,"Attempting connection to socket")
+            Log.d(debugTag,"Attempting connection to socket...")
 
             socket?.connect()
         } catch (exception: IOException) {
@@ -225,8 +236,16 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         }
     }
 
+    private fun showDiscoveryNotInProgress() {
+        refresh.isEnabled = true
+
+        loadingSpinner.visibility = View.GONE
+    }
+
     private fun showDiscoveryInProgress() {
         DataManager.devices.clear()
+
+        bluetoothDevices.clear()
 
         loadingSpinner.visibility = View.VISIBLE
 
@@ -236,7 +255,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
     private fun checkIfBluetoothIsOn() {
         if (bluetoothAdapter?.isEnabled == false) {
             val enableBluetooth = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            startActivityForResult(enableBluetooth, enableBtRequest)
+            startActivityForResult(enableBluetooth, enableBtRequestCode)
         }
     }
 
@@ -248,12 +267,11 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == enableBtRequest) {
+        if (requestCode == enableBtRequestCode) {
             if (resultCode == RESULT_OK) {
-                smoothBluetooth.tryConnection()
+                launchDiscovery()
             }else{
-                loadingSpinner.visibility = View.GONE
-                refresh.isEnabled = true
+                showDiscoveryNotInProgress()
             }
         }
     }
@@ -274,7 +292,6 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
     private fun closeSocket() {
         socket?.close()
     }
-
 
     override fun onCreateView(
             inflater: LayoutInflater, container: ViewGroup?,
