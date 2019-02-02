@@ -23,8 +23,6 @@ import android.view.ViewGroup
 import android.widget.Toast
 import kotlinx.android.synthetic.main.content_bluetooth_list.*
 import java.io.IOException
-import java.util.*
-import java.util.concurrent.Delayed
 
 
 class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
@@ -146,7 +144,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         }
     }
 
-    private fun droneWasFound(): Boolean = drone != null
+    private fun connectedToDrone(): Boolean = drone != null
 
     override fun onClick(deviceAddress: String) {
 
@@ -240,7 +238,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
         checkIfDroneInPairedDevices()
 
-        if(!droneWasFound())
+        if(!connectedToDrone())
             launchDiscovery()
     }
 
@@ -250,7 +248,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
         bluetoothAdapter?.bondedDevices?.forEach { device ->
             Log.d(debugTag, "${device.name} is a paired device, checking if it's a drone...")
-            if(!droneWasFound()){
+            if(!connectedToDrone()){
                 tryToConnectToDevice(device)
             }
         }
