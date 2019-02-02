@@ -2,6 +2,7 @@ package com.example.bluetoothproofofconcept
 
 import android.Manifest
 import android.app.Activity.RESULT_OK
+import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
@@ -23,10 +24,7 @@ import android.widget.Toast
 import kotlinx.android.synthetic.main.content_bluetooth_list.*
 import java.io.IOException
 import java.util.*
-import android.app.AlertDialog
-import android.content.DialogInterface
-
-
+import java.util.concurrent.Delayed
 
 
 class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
@@ -43,8 +41,6 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
     private var drone: BluetoothDevice? = null
 
-    private val droneBluetoothUUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
-
     private val filter by lazy {
         val filter = IntentFilter()
         filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
@@ -53,6 +49,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
         filter.addAction(BluetoothDevice.ACTION_UUID)
+        filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         filter
     }
 
@@ -103,6 +100,19 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
                         addDeviceToList(device)
                     }
                 }
+
+                BluetoothDevice.ACTION_BOND_STATE_CHANGED ->{
+                    val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, -1)
+                    val previousState = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, -1)
+                    val device = getBluetoothDeviceFromIntent(intent)
+
+                    Log.d(debugTag, "ACTION_BOND_STATE_CHANGED")
+                    Log.d(debugTag, "State of ${device.name} : $state Previous state : $previousState")
+
+                    if(state == BluetoothDevice.BOND_BONDED){
+                        tryToConnectToDevice(device)
+                    }
+                }
             }
         }
     }
@@ -151,17 +161,9 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         if(device != null){
             if(deviceIsNotPaired(device)) {
                 if (pairDevice(device)) {
-                    Log.d(debugTag,"${device?.name} paired successfully!")
-                    Thread { // launch new coroutine in background and continue
-                        while(bluetoothAdapter?.bondedDevices?.any { it.address == drone?.address } == false)
-                        {
-                            Thread.sleep(200)
-                        }
-
-                        tryToConnectToDevice(device)
-                    }
+                    Log.d(debugTag,"${device.name} paired successfully!")
                 } else {
-                    Log.d(debugTag,"${drone?.name} failed pairing!")
+                    Log.d(debugTag,"${device.name} failed pairing!")
                 }
             }else{
                 tryToConnectToDevice(device)
@@ -351,7 +353,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         if (context is OnFragmentInteractionListener) {
             listener = context
         } else {
-            throw RuntimeException(context.toString() + " must implement OnFragmentInteractionListener")
+            throw RuntimeException("$context must implement OnFragmentInteractionListener")
         }
     }
 
