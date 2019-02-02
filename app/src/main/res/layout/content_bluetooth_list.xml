@@ -17,7 +17,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/refresh"
+        app:layout_constraintTop_toBottomOf="@+id/searchAndConnect"
         tools:listitem="@layout/item_bluetooth_list" />
 
     <ProgressBar
@@ -29,15 +29,15 @@
             app:layout_constraintTop_toTopOf="parent"
             android:layout_marginTop="8dp" app:layout_constraintStart_toStartOf="parent"
             android:layout_marginStart="8dp" android:layout_marginBottom="8dp"
-            app:layout_constraintBottom_toTopOf="@+id/items" app:layout_constraintEnd_toStartOf="@+id/refresh"
+            app:layout_constraintBottom_toTopOf="@+id/items" app:layout_constraintEnd_toStartOf="@+id/searchAndConnect"
             android:visibility="gone"/>
 
     <Button
-            android:id="@+id/refresh"
+            android:id="@+id/searchAndConnect"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
-            android:text="Refresh"
+            android:text="Search and connect"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@+id/loadingSpinner" android:layout_marginStart="8dp"
             app:layout_constraintTop_toTopOf="parent" android:layout_marginTop="8dp"
