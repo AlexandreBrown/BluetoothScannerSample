@@ -7,23 +7,22 @@
     android:background="@color/cardview_dark_background">
 
     <android.support.v7.widget.RecyclerView
-        android:id="@+id/items"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginStart="8dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="8dp"
-        android:layout_marginBottom="8dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/search"
-        tools:listitem="@layout/item_bluetooth_list" />
+            android:id="@+id/items"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginBottom="8dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            tools:listitem="@layout/item_bluetooth_list" android:layout_marginTop="8dp"
+            app:layout_constraintTop_toBottomOf="@+id/disconnectDevice"/>
 
     <ProgressBar
             android:id="@+id/loadingSpinner"
             style="?android:attr/progressBarStyleLarge"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="0dp"
             android:layout_centerHorizontal="true"
             app:layout_constraintTop_toTopOf="parent"
@@ -41,5 +40,24 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@+id/loadingSpinner" android:layout_marginStart="8dp"
             app:layout_constraintTop_toTopOf="parent" android:layout_marginTop="8dp"
-            app:layout_constraintBottom_toTopOf="@+id/items"/>
+            android:background="@android:color/holo_blue_dark" android:textColor="@android:color/background_light"
+    />
+    <Button
+            android:text="Disconnect from drone"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content" android:id="@+id/disconnectDevice"
+            android:layout_marginTop="8dp" app:layout_constraintTop_toBottomOf="@+id/search"
+            app:layout_constraintBottom_toTopOf="@+id/items" app:layout_constraintStart_toStartOf="parent"
+            android:layout_marginStart="8dp" app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginEnd="8dp" android:visibility="gone"
+            android:background="@android:color/holo_red_dark" android:textColor="@android:color/background_light"/>
+    <TextView
+            android:text="Finding your drone..."
+            android:layout_width="0dp"
+            android:layout_height="wrap_content" android:id="@+id/findDroneMsg" android:visibility="gone"
+            android:layout_marginEnd="8dp" app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/loadingSpinner"
+            android:layout_marginStart="8dp"
+            app:layout_constraintTop_toTopOf="@+id/loadingSpinner"
+            app:layout_constraintBottom_toBottomOf="@+id/loadingSpinner"/>
 </android.support.constraint.ConstraintLayout>

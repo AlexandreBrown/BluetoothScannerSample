@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.support.design.widget.Snackbar
 import android.support.v4.app.ActivityCompat
 import android.support.v4.app.Fragment
 import android.support.v4.content.ContextCompat
@@ -22,7 +23,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import kotlinx.android.synthetic.main.content_bluetooth_list.*
-import java.io.IOException
+import java.lang.Exception
+import java.util.*
 
 
 class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
@@ -37,16 +39,13 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
     private var socket: BluetoothSocket? = null
 
-    private var drone: BluetoothDevice? = null
+    private var connectedDevice: BluetoothDevice? = null
 
     private val filter by lazy {
         val filter = IntentFilter()
-        filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
-        filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
-        filter.addAction(BluetoothDevice.ACTION_FOUND)
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
-        filter.addAction(BluetoothDevice.ACTION_UUID)
+        filter.addAction(BluetoothDevice.ACTION_FOUND)
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         filter
     }
@@ -59,27 +58,12 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
             val action = intent.action
 
             when (action) {
-                BluetoothDevice.ACTION_ACL_CONNECTED -> {
-                    val device = getBluetoothDeviceFromIntent(intent)
-                    Log.d(debugTag,"Connected to ${device.name}")
-
-                    Toast.makeText(requireContext(), "Connected to ${device?.name}", Toast.LENGTH_LONG).show()
-                }
-
-                BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                    val device = getBluetoothDeviceFromIntent(intent)
-
-                    Log.d(debugTag,"Disconnected from ${device.name}")
-
-                    Toast.makeText(requireContext(), "Disconnected from ${device?.name}", Toast.LENGTH_LONG).show()
-                }
-
                 BluetoothAdapter.ACTION_DISCOVERY_STARTED -> {
                     Log.d(debugTag,"DISCOVERY_STARTED")
+                    Toast.makeText(requireContext(),"Searching for your drone...", Toast.LENGTH_LONG).show()
 
                     disableAutoConnect()
                 }
-
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                     Log.d(debugTag,"DISCOVERY_FINISHED")
 
@@ -89,8 +73,8 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
                     enableAutoConnect()
                 }
-
                 BluetoothDevice.ACTION_FOUND ->{
+                    Log.d(debugTag, "ACTION_FOUND")
 
                     val device = getBluetoothDeviceFromIntent(intent)
 
@@ -98,21 +82,56 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
                         addDeviceToList(device)
                     }
                 }
-
                 BluetoothDevice.ACTION_BOND_STATE_CHANGED ->{
+                    Log.d(debugTag, "ACTION_BOND_STATE_CHANGED")
+
                     val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, -1)
-                    val previousState = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, -1)
                     val device = getBluetoothDeviceFromIntent(intent)
 
-                    Log.d(debugTag, "ACTION_BOND_STATE_CHANGED")
-                    Log.d(debugTag, "State of ${device.name} : $state Previous state : $previousState")
-
                     if(state == BluetoothDevice.BOND_BONDED){
-                        tryToConnectToDevice(device)
+                        doWithDevice(ConnectivityAction.CONNECT, device)
                     }
                 }
             }
         }
+    }
+
+    private fun doWithDevice(action: ConnectivityAction, device: BluetoothDevice? = null){
+        try {
+                when (action){
+                    ConnectivityAction.PAIR -> {
+                        Log.d(debugTag,"Trying to pair ${device?.name}...")
+
+                        tryToPairDevice(device)
+                    }
+                    ConnectivityAction.CONNECT ->{
+                        Log.d(debugTag,"Trying to connect to ${device?.name}...")
+
+                        tryToConnectToDevice(device)
+
+                        Snackbar.make(requireActivity().findViewById(android.R.id.content), "Connected to ${connectedDevice?.name}", Snackbar.LENGTH_SHORT).show()
+
+                        enableDisconnectFromDrone()
+                        enableAutoConnect()
+                    }
+                    ConnectivityAction.DISCONNECT ->{
+                        Log.d(debugTag,"Trying to disconnect from ${connectedDevice?.name}...")
+
+                        tryToCloseSocket()
+
+                        Log.d(debugTag,"Disconnected from ${connectedDevice?.name}...")
+                        Snackbar.make(requireActivity().findViewById(android.R.id.content), "Disconnected from ${connectedDevice?.name}", Snackbar.LENGTH_SHORT).show()
+
+                        connectedDevice = null
+
+
+                        disableDisconnectFromDrone()
+                        enableAutoConnect()
+                    }
+                }
+            }catch(e: Exception){
+                Log.d(debugTag,e.message)
+            }
     }
 
     private fun showMessageInDialog(message: String){
@@ -144,29 +163,12 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         }
     }
 
-    private fun connectedToDrone(): Boolean = drone != null
+    private fun connectedToDrone(): Boolean = connectedDevice != null
 
     override fun onClick(deviceAddress: String) {
-
         val device = bluetoothAdapter?.getRemoteDevice(deviceAddress)
 
-        tryToPairConnectDevice(device)
-    }
-
-    private fun tryToPairConnectDevice(device: BluetoothDevice?){
-        cancelDiscoveryIfAlreadyInProgress()
-
-        if(device != null){
-            if(deviceIsNotPaired(device)) {
-                if (pairDevice(device)) {
-                    Log.d(debugTag,"${device.name} paired successfully!")
-                } else {
-                    Log.d(debugTag,"${device.name} failed pairing!")
-                }
-            }else{
-                tryToConnectToDevice(device)
-            }
-        }
+        doWithDevice(ConnectivityAction.PAIR,device)
     }
 
     private fun deviceIsNotPaired(device: BluetoothDevice?) =
@@ -174,34 +176,42 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
     private fun pairDevice(device: BluetoothDevice) = device.createBond()
 
-    private fun tryToConnectToDevice(device: BluetoothDevice){
-        try {
-            closeSocketIfConnected()
+    private fun tryToPairDevice(device: BluetoothDevice?){
+        cancelDiscoveryIfAlreadyInProgress()
 
-            createSocket(device)
+        if(device == null)
+            throw Exception("Can't pair a null device")
 
-            Log.d(debugTag,"Trying to connect to ${device.name}...")
-
-            socket?.connect()
-
-            drone = device
-
-            enableAutoConnect()
-        } catch (exception: IOException) {
-            Log.d(debugTag,"Connection to ${device.name} failed, ${exception.message}")
-        }
+        if (!pairDevice(device))
+            throw Exception("Failed pairing with ${device.name}")
     }
 
-    private fun createSocket(device: BluetoothDevice) {
+    private fun tryToConnectToDevice(device: BluetoothDevice?){
+        tryToCloseSocketIfConnected()
+
+        if(device == null)
+            throw Exception("Can't connect to a null device")
+
+        tryToCreateSocket(device)
+
+        socket?.connect()
+
+        Log.d(debugTag, "Connected to ${socket?.remoteDevice?.name}")
+
+        connectedDevice = socket?.remoteDevice
+    }
+
+    private fun tryToCreateSocket(device: BluetoothDevice) {
         Log.d(debugTag, "Creating socket...")
 
-        val method = device::class.java.getMethod("createRfcommSocket", Int::class.java)
-        socket = method.invoke(device, 1) as BluetoothSocket?
+        socket = device.createRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
+
+        Log.d(debugTag, "Socket created!")
     }
 
-    private fun closeSocketIfConnected() {
+    private fun tryToCloseSocketIfConnected() {
         if (socket?.isConnected == true) {
-            socket?.close()
+            tryToCloseSocket()
         }
     }
 
@@ -219,6 +229,10 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
             onButtonPressed()
         }
 
+        disconnectDevice.setOnClickListener {
+            doWithDevice(ConnectivityAction.DISCONNECT,connectedDevice)
+        }
+
         items.layoutManager = LinearLayoutManager(context)
 
         val adapter = BluetoothRecyclerAdapter(this.requireContext(), DataManager.devices)
@@ -230,7 +244,7 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
     }
 
     private fun tryToAutoConnect() {
-        drone = null
+        connectedDevice = null
 
         checkIfAccessCoarseLocationIsGranted()
 
@@ -244,24 +258,20 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
 
     private fun checkIfDroneInPairedDevices(){
-        Log.d(debugTag, "Checking if drone is in paired devices")
+        Log.d(debugTag, "Checking for paired devices")
 
         bluetoothAdapter?.bondedDevices?.forEach { device ->
             Log.d(debugTag, "${device.name} is a paired device, checking if it's a drone...")
             if(!connectedToDrone()){
-                tryToConnectToDevice(device)
+                doWithDevice(ConnectivityAction.CONNECT, device)
             }
         }
     }
 
     private fun launchDiscovery() {
-        Log.d(debugTag, "Couldn't find drone in paired devices, starting discovery...")
-
         cancelDiscoveryIfAlreadyInProgress()
 
-        showMessageInDialog("No paired drone found, your drone needs to be paired in order to be connected automatically when the app starts. Please select your drone to pair it.")
-
-        Toast.makeText(requireContext(), "Searching for devices...", Toast.LENGTH_LONG).show()
+        showMessageInDialog("Couldn't find your drone in your paired devices, this means your drone is turned off or it's not paired yet, we'll show you nearby devices, simply select your drone to pair it.")
 
         startDiscovery()
     }
@@ -274,13 +284,24 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         if (bluetoothAdapter?.isDiscovering == true) {
             Log.d(debugTag, "Cancelling discovery...")
             bluetoothAdapter?.cancelDiscovery()
+            enableAutoConnect()
         }
     }
 
     private fun enableAutoConnect() {
-        search.isEnabled = true
+        search.visibility = View.VISIBLE
 
         loadingSpinner.visibility = View.GONE
+        findDroneMsg.visibility = View.GONE
+    }
+
+    private fun enableDisconnectFromDrone(){
+        if(connectedDevice != null)
+            disconnectDevice.visibility = View.VISIBLE
+    }
+
+    private fun disableDisconnectFromDrone(){
+        disconnectDevice.visibility = View.GONE
     }
 
     private fun disableAutoConnect() {
@@ -289,8 +310,9 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
         bluetoothDevices.clear()
 
         loadingSpinner.visibility = View.VISIBLE
+        findDroneMsg.visibility = View.VISIBLE
 
-        search.isEnabled = false
+        search.visibility = View.GONE
     }
 
     private fun checkIfBluetoothIsOn() {
@@ -325,12 +347,12 @@ class BluetoothListFragment : Fragment(), onBluetoothItemInteraction {
 
     override fun onPause() {
         super.onPause()
-        closeSocket()
+        tryToCloseSocket()
         cancelDiscoveryIfAlreadyInProgress()
         requireContext().unregisterReceiver(bluetoothReceiver)
     }
 
-    private fun closeSocket() {
+    private fun tryToCloseSocket() {
         socket?.close()
     }
 
