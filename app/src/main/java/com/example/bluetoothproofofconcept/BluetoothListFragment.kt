@@ -131,14 +131,15 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                         enableDisconnectFromDrone()
                     }
                     ConnectivityAction.DISCONNECT ->{
-                        Log.d(debugTag,"Trying to disconnect from ${connectedDevice?.name}...")
+                        val connectedDeviceName = connectedDevice?.name
+                        Log.d(debugTag,"Trying to disconnect from $connectedDeviceName...")
 
                         tryToCloseSocket()
 
-                        Log.d(debugTag,"Disconnected from ${connectedDevice?.name}...")
+                        Log.d(debugTag,"Disconnected from $connectedDeviceName...")
 
                         requireActivity().runOnUiThread {
-                            Snackbar.make(requireActivity().findViewById(android.R.id.content), "Disconnected from ${connectedDevice?.name}", Snackbar.LENGTH_SHORT).show()
+                            Snackbar.make(requireActivity().findViewById(android.R.id.content), "Disconnected from $connectedDeviceName", Snackbar.LENGTH_SHORT).show()
                         }
 
                         connectedDevice = null
@@ -182,9 +183,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
             bluetoothDevices.add(device)
 
-            requireActivity().runOnUiThread {
-                (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
-            }
+            (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
         }
     }
 
