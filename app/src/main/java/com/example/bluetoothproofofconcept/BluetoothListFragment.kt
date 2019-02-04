@@ -47,6 +47,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
         filter.addAction(BluetoothDevice.ACTION_FOUND)
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
         filter
     }
 
@@ -66,10 +67,13 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                     Log.d(debugTag,"DISCOVERY_FINISHED")
 
-                    enableFindMyDrone()
+                    if(!connectedToDrone()){
+                        enableFindMyDrone()
 
-                    if(bluetoothDevices.size == 0)
-                        showMessageInDialog("No bluetooth device were found, make sure your drone is powered on")
+                        if(bluetoothDevices.size == 0)
+                            showMessageInDialog("No bluetooth device were found, make sure your drone is powered on")
+                    }
+
                 }
                 BluetoothDevice.ACTION_FOUND ->{
                     Log.d(debugTag, "ACTION_FOUND")
@@ -88,6 +92,15 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                     if(state == BluetoothDevice.BOND_BONDED)
                         doWithDevice(ConnectivityAction.CONNECT, device)
                 }
+                BluetoothAdapter.ACTION_STATE_CHANGED ->{
+                    val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)
+                    when(state){
+                        BluetoothAdapter.STATE_OFF ->{
+                            Log.d(debugTag, "BLUETOOTH STATE_OFF")
+                            doWithDevice(ConnectivityAction.DISCONNECT)
+                        }
+                    }
+                }
             }
         }
     }
@@ -101,8 +114,10 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                         tryToPairDevice(device)
                     }
                     ConnectivityAction.CONNECT ->{
-                        Log.d(debugTag,"Trying to connect to ${device?.name}...")
 
+                        if(deviceIsAlreadyConnected(device))
+                            throw Exception("${device?.name} is already connected")
+                        
                         tryToConnectToDevice(device)
 
                         Snackbar.make(requireActivity().findViewById(android.R.id.content), "Connected to ${connectedDevice?.name}", Snackbar.LENGTH_SHORT).show()
@@ -129,6 +144,9 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                 Log.d(debugTag,e.message)
             }
     }
+
+    private fun deviceIsAlreadyConnected(device: BluetoothDevice?) =
+            socket != null && socket?.isConnected == true && socket?.remoteDevice?.address == device?.address
 
     private fun showMessageInDialog(message: String){
         val dialogBuilder = AlertDialog.Builder(context)
@@ -174,6 +192,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
         if(deviceIsPaired(device))
         {
+            Log.d(debugTag,"${device?.name} is already paired")
             doWithDevice(ConnectivityAction.CONNECT,device)
         }else{
             if(device == null)
@@ -189,6 +208,8 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
         device?.bondState == BluetoothDevice.BOND_BONDED
 
     private fun tryToConnectToDevice(device: BluetoothDevice?){
+        Log.d(debugTag,"Trying to connect to ${device?.name}...")
+
         tryToCloseSocketIfConnected()
 
         if(device == null)
