@@ -6,20 +6,18 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import android.widget.Toast
 import kotlinx.android.synthetic.main.item_bluetooth_list.view.*
-import java.util.*
 
-interface onBluetoothItemInteraction{
+interface OnBluetoothItemInteraction{
     fun onClick(deviceAddress: String)
 }
 
 class BluetoothRecyclerAdapter(private val context: Context, private val devices: List<Device>) : RecyclerView.Adapter<BluetoothRecyclerAdapter.ViewHolder>() {
 
-    private lateinit var listener: onBluetoothItemInteraction
+    private lateinit var listener: OnBluetoothItemInteraction
     private val layoutInflater = LayoutInflater.from(context)
 
-    fun setListener(listener: onBluetoothItemInteraction){
+    fun setListener(listener: OnBluetoothItemInteraction){
         this.listener = listener
     }
 
