@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.provider.Settings
 import android.support.design.widget.Snackbar
 import android.support.v4.app.ActivityCompat
 import android.support.v4.app.Fragment
@@ -23,6 +24,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import kotlinx.android.synthetic.main.content_bluetooth_list.*
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import java.lang.Exception
 import java.util.*
 
@@ -120,7 +123,9 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                         
                         tryToConnectToDevice(device)
 
-                        Snackbar.make(requireActivity().findViewById(android.R.id.content), "Connected to ${connectedDevice?.name}", Snackbar.LENGTH_SHORT).show()
+                        requireActivity().runOnUiThread {
+                            Snackbar.make(requireActivity().findViewById(android.R.id.content), "Connected to ${connectedDevice?.name}", Snackbar.LENGTH_SHORT).show()
+                        }
 
                         disableFindMyDrone()
                         enableDisconnectFromDrone()
@@ -132,7 +137,9 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
                         Log.d(debugTag,"Disconnected from ${connectedDevice?.name}...")
 
-                        Snackbar.make(requireActivity().findViewById(android.R.id.content), "Disconnected from ${connectedDevice?.name}", Snackbar.LENGTH_SHORT).show()
+                        requireActivity().runOnUiThread {
+                            Snackbar.make(requireActivity().findViewById(android.R.id.content), "Disconnected from ${connectedDevice?.name}", Snackbar.LENGTH_SHORT).show()
+                        }
 
                         connectedDevice = null
 
@@ -149,16 +156,18 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
             socket != null && socket?.isConnected == true && socket?.remoteDevice?.address == device?.address
 
     private fun showMessageInDialog(message: String){
-        val dialogBuilder = AlertDialog.Builder(context)
-        dialogBuilder.setMessage(message)
-        dialogBuilder.setCancelable(true)
+        requireActivity().runOnUiThread {
+            val dialogBuilder = AlertDialog.Builder(context)
+            dialogBuilder.setMessage(message)
+            dialogBuilder.setCancelable(true)
 
-        dialogBuilder.setPositiveButton(
-            "OK"
-        ) { dialog, _ -> dialog.cancel() }
+            dialogBuilder.setPositiveButton(
+                    "OK"
+            ) { dialog, _ -> dialog.cancel() }
 
-        val alertDialog = dialogBuilder.create()
-        alertDialog.show()
+            val alertDialog = dialogBuilder.create()
+            alertDialog.show()
+        }
     }
 
     private fun getBluetoothDeviceFromIntent(intent: Intent) =
@@ -173,7 +182,9 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
             bluetoothDevices.add(device)
 
-            (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
+            requireActivity().runOnUiThread {
+                (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
+            }
         }
     }
 
@@ -261,24 +272,29 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
         adapter.setListener(this)
 
         items.adapter = adapter
+    }
 
+    override fun onStart() {
+        super.onStart()
         tryToAutoConnect()
     }
 
     private fun tryToAutoConnect() {
-        disableFindMyDrone()
+        GlobalScope.launch {
+            disableFindMyDrone()
 
-        connectedDevice = null
+            connectedDevice = null
 
-        checkIfAccessCoarseLocationIsGranted()
+            checkIfAccessCoarseLocationIsGranted()
 
-        checkIfBluetoothIsOn()
+            checkIfBluetoothIsOn()
 
-        checkIfDroneInPairedDevices()
+            checkIfDroneInPairedDevices()
 
-        if(!connectedToDrone()){
-            showMessageInDialog("Couldn't find your drone in your paired devices, this means your drone is turned off or it's not paired yet. We will show you nearby devices, simply select your drone to pair it.")
-            launchDiscovery()
+            if(!connectedToDrone()){
+                showMessageInDialog("Couldn't find your drone in your paired devices, this means your drone is turned off or it's not paired yet. We will show you nearby devices, simply select your drone to pair it.")
+                launchDiscovery()
+            }
         }
     }
 
@@ -314,27 +330,35 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
     }
 
     private fun enableFindMyDrone() {
-        loadingSpinner.visibility = View.INVISIBLE
-        search.visibility = View.VISIBLE
+        requireActivity().runOnUiThread {
+            loadingSpinner.visibility = View.INVISIBLE
+            search.visibility = View.VISIBLE
+        }
     }
 
     private fun disableFindMyDrone() {
         DataManager.devices.clear()
         bluetoothDevices.clear()
 
-        loadingSpinner.visibility = View.VISIBLE
-        search.visibility = View.INVISIBLE
+        requireActivity().runOnUiThread {
+            loadingSpinner.visibility = View.VISIBLE
+            search.visibility = View.INVISIBLE
+        }
     }
 
     private fun enableDisconnectFromDrone(){
         if(connectedDevice != null)
         {
-            disconnectDevice.visibility = View.VISIBLE
+            requireActivity().runOnUiThread {
+                disconnectDevice.visibility = View.VISIBLE
+            }
         }
     }
 
     private fun disableDisconnectFromDrone(){
-        disconnectDevice.visibility = View.INVISIBLE
+        requireActivity().runOnUiThread {
+            disconnectDevice.visibility = View.INVISIBLE
+        }
     }
 
     private fun checkIfBluetoothIsOn() {
@@ -369,9 +393,13 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
     override fun onPause() {
         super.onPause()
-        tryToCloseSocket()
         cancelDiscoveryIfAlreadyInProgress()
         requireContext().unregisterReceiver(bluetoothReceiver)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        doWithDevice(ConnectivityAction.DISCONNECT)
     }
 
     private fun tryToCloseSocket() {
