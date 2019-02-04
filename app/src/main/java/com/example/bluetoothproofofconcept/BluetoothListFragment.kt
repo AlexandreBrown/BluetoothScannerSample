@@ -65,7 +65,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                 BluetoothAdapter.ACTION_DISCOVERY_STARTED -> {
                     Log.d(debugTag,"DISCOVERY_STARTED")
 
-                    Toast.makeText(requireContext(),"Searching for your drone...", Toast.LENGTH_LONG).show()
+                    Toast.makeText(requireContext(),"Searching nearby devices...", Toast.LENGTH_LONG).show()
                 }
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                     Log.d(debugTag,"DISCOVERY_FINISHED")
@@ -300,6 +300,10 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
     private fun checkIfDroneInPairedDevices(){
         Log.d(debugTag, "Checking for paired devices")
+
+        requireActivity().runOnUiThread {
+            Toast.makeText(requireContext(), "Searching in paired devices...", Toast.LENGTH_SHORT).show()
+        }
 
         bluetoothAdapter?.bondedDevices?.forEach { device ->
             Log.d(debugTag, "${device.name} is a paired device, checking if it's a drone...")
