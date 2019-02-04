@@ -12,7 +12,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.provider.Settings
 import android.support.design.widget.Snackbar
 import android.support.v4.app.ActivityCompat
 import android.support.v4.app.Fragment
@@ -51,6 +50,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
         filter.addAction(BluetoothDevice.ACTION_FOUND)
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+        filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
         filter
     }
 
@@ -104,6 +104,15 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                         }
                     }
                 }
+                BluetoothDevice.ACTION_ACL_DISCONNECTED ->{
+                    Log.d(debugTag, "ACTION_ACL_DISCONNECTED")
+
+                    val device = getBluetoothDeviceFromIntent(intent)
+
+                    if(alreadyConnectedTo(device)){
+                        doWithDevice(ConnectivityAction.DISCONNECT)
+                    }
+                }
             }
         }
     }
@@ -118,9 +127,9 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                     }
                     ConnectivityAction.CONNECT ->{
 
-                        if(deviceIsAlreadyConnected(device))
+                        if(alreadyConnectedTo(device))
                             throw Exception("${device?.name} is already connected")
-                        
+
                         tryToConnectToDevice(device)
 
                         requireActivity().runOnUiThread {
@@ -153,8 +162,8 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
             }
     }
 
-    private fun deviceIsAlreadyConnected(device: BluetoothDevice?) =
-            socket != null && socket?.isConnected == true && socket?.remoteDevice?.address == device?.address
+    private fun alreadyConnectedTo(device: BluetoothDevice?) =
+            socket != null && socket?.isConnected == true && connectedDevice?.address == device?.address
 
     private fun showMessageInDialog(message: String){
         requireActivity().runOnUiThread {
