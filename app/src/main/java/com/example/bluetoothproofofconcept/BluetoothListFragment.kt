@@ -51,10 +51,13 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+        filter.addAction(BluetoothDevice.ACTION_UUID)
         filter
     }
 
     private val debugTag = "BluetoothLog"
+
+    private val droneUUID = "00001101-0000-1000-8000-00805F9B34FB"
 
     private val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
 
@@ -78,6 +81,21 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                     }
 
                 }
+                BluetoothDevice.ACTION_UUID->{
+                    Log.d(debugTag,"ACTION UUID")
+
+                    val device = getBluetoothDeviceFromIntent(intent)
+
+                    intent.getParcelableArrayExtra(BluetoothDevice.EXTRA_UUID)?.forEach {
+                        if(it.toString().toUpperCase() == droneUUID){
+                            Log.d(debugTag,"${device?.name} is a drone (found in paired devices)!")
+                            if(!connectedToDrone()){
+                                doWithDevice(ConnectivityAction.CONNECT, device)
+                            }
+                        }
+                    }
+
+                }
                 BluetoothDevice.ACTION_FOUND ->{
                     Log.d(debugTag, "ACTION_FOUND")
 
@@ -85,6 +103,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
                     if(deviceHasValidAttributes(device))
                         addDeviceToList(device)
+
                 }
                 BluetoothDevice.ACTION_BOND_STATE_CHANGED ->{
                     Log.d(debugTag, "ACTION_BOND_STATE_CHANGED")
@@ -252,7 +271,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
     private fun tryToCreateSocket(device: BluetoothDevice) {
         Log.d(debugTag, "Creating socket...")
 
-        socket = device.createRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
+        socket = device.createRfcommSocketToServiceRecord(UUID.fromString(droneUUID))
 
         Log.d(debugTag, "Socket created!")
     }
@@ -310,16 +329,15 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
     private fun checkIfDroneInPairedDevices(){
         Log.d(debugTag, "Checking for paired devices")
 
+        cancelDiscoveryIfAlreadyInProgress()
+
         requireActivity().runOnUiThread {
             Toast.makeText(requireContext(), "Searching in paired devices...", Toast.LENGTH_SHORT).show()
         }
 
         bluetoothAdapter?.bondedDevices?.forEach { device ->
             Log.d(debugTag, "${device.name} is a paired device, checking if it's a drone...")
-
-            if(!connectedToDrone()){
-                doWithDevice(ConnectivityAction.CONNECT, device)
-            }
+            device.fetchUuidsWithSdp()
         }
     }
 
