@@ -2,5 +2,5 @@ package com.example.bluetoothproofofconcept
 
 object DataManager {
 
-   val devices = mutableListOf<BluetoothDeviceModel>()
+   val drones = mutableListOf<BluetoothDeviceModel>()
 }

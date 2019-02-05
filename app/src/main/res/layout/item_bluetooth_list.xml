@@ -31,6 +31,16 @@
                 app:srcCompat="@android:drawable/stat_sys_data_bluetooth" />
 
             <TextView
+                    android:text="TextView"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content" android:id="@+id/devicePairingState"
+                    android:layout_marginBottom="8dp"
+                    app:layout_constraintBottom_toTopOf="@+id/deviceName"
+                    app:layout_constraintStart_toEndOf="@+id/bluetoothIcon" android:layout_marginStart="8dp"
+                    android:textColor="@android:color/background_light"
+                    android:layout_marginTop="8dp"
+                    app:layout_constraintTop_toTopOf="parent" android:textStyle="bold"/>
+            <TextView
                 android:id="@+id/deviceName"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"

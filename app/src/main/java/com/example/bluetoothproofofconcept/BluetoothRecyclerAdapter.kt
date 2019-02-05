@@ -39,10 +39,12 @@ class BluetoothRecyclerAdapter(private val context: Context, private val devices
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.name.text = devices[position].name
         holder.address.text = devices[position].address
+        holder.paired.text = if(devices[position].paired) "PAIRED" else "UNPAIRED"
     }
 
     class ViewHolder(itemView: View): RecyclerView.ViewHolder(itemView){
         val name: TextView = itemView.deviceName
         val address: TextView = itemView.deviceAddress
+        val paired: TextView = itemView.devicePairingState
     }
 }
