@@ -90,6 +90,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
                     val UUIDs =intent.getParcelableArrayExtra(BluetoothDevice.EXTRA_UUID)
 
+                    Log.d(debugTag,"${device.name} UUIDs : $UUIDs")
                     UUIDs?.forEach {
                         Log.d(debugTag, "${device.name} : UUID : $it")
                         if(deviceHasValidAttributes(device) && UUIDMatchesDroneUUID(it) && !connectedToDrone()){
@@ -178,7 +179,9 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                         Log.d(debugTag,"Disconnected from $connectedDeviceName...")
 
                         requireActivity().runOnUiThread {
-                            Snackbar.make(requireActivity().findViewById(android.R.id.content), "Disconnected from $connectedDeviceName", Snackbar.LENGTH_SHORT).show()
+                            if(connectedDevice != null){
+                                Snackbar.make(requireActivity().findViewById(android.R.id.content), "Disconnected from $connectedDeviceName", Snackbar.LENGTH_SHORT).show()
+                            }
                         }
 
                         connectedDevice = null
@@ -333,7 +336,9 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
         discoveredBluetoothDevices.clear()
 
-        items.adapter?.notifyDataSetChanged()
+        requireActivity().runOnUiThread {
+            items.adapter?.notifyDataSetChanged()
+        }
 
         startDiscovery()
     }
