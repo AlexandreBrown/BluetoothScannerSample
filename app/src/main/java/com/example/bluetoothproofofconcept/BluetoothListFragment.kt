@@ -73,6 +73,11 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                     Log.d(debugTag,"DISCOVERY_FINISHED")
 
+                    bluetoothDevices.forEach { device ->
+                        Log.d(debugTag, "${device.name} is an UNPAIRED device, checking if it's a drone...")
+                        device.fetchUuidsWithSdp()
+                    }
+
                     if(!connectedToDrone()){
                         enableFindMyDrone()
 
@@ -86,9 +91,17 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
                     val device = getBluetoothDeviceFromIntent(intent)
 
-                    intent.getParcelableArrayExtra(BluetoothDevice.EXTRA_UUID)?.forEach {
+                    val UUIDs =intent.getParcelableArrayExtra(BluetoothDevice.EXTRA_UUID)
+                    if(UUIDs == null)
+                        Log.d(debugTag,"UUIDs for ${device?.name} is NULL (found in ACTION_UUID)!")
+                    if(UUIDs?.get(0) == null)
+                        Log.d(debugTag,"UUIDs?.get(0) for ${device?.name} is NULL (found in ACTION_UUID)!")
+
+                    UUIDs?.forEach {
+                        Log.d(debugTag,"Device ${device?.name} Testing if UUID $it is a drone UUID (found in ACTION_UUID)!")
+
                         if(it.toString().toUpperCase() == droneUUID){
-                            Log.d(debugTag,"${device?.name} is a drone (found in paired devices)!")
+                            Log.d(debugTag,"${device?.name} is a drone (found in ACTION_UUID)!")
                             if(!connectedToDrone()){
                                 doWithDevice(ConnectivityAction.CONNECT, device)
                             }
