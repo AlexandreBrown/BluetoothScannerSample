@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Parcelable
 import android.support.design.widget.Snackbar
 import android.support.v4.app.ActivityCompat
 import android.support.v4.app.Fragment
@@ -33,7 +34,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
     private var listener: OnFragmentInteractionListener? = null
 
-    private var bluetoothDevices: MutableList<BluetoothDevice> = mutableListOf()
+    private var discoveredBluetoothDevices: MutableList<BluetoothDevice> = mutableListOf()
 
     private var bluetoothAdapter: BluetoothAdapter? = null
 
@@ -42,6 +43,8 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
     private var socket: BluetoothSocket? = null
 
     private var connectedDevice: BluetoothDevice? = null
+
+    private var numberOfCheckedDevices = 0
 
     private val filter by lazy {
         val filter = IntentFilter()
@@ -68,41 +71,48 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                 BluetoothAdapter.ACTION_DISCOVERY_STARTED -> {
                     Log.d(debugTag,"DISCOVERY_STARTED")
 
-                    Toast.makeText(requireContext(),"Searching nearby devices...", Toast.LENGTH_LONG).show()
+                    Toast.makeText(requireContext(),"Searching nearby drones...", Toast.LENGTH_LONG).show()
                 }
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                     Log.d(debugTag,"DISCOVERY_FINISHED")
 
-                    if(!connectedToDrone()){
-                        enableFindMyDrone()
-
-                        if(bluetoothDevices.size == 0)
-                            showMessageInDialog("No bluetooth device were found, make sure your drone is powered on")
+                    discoveredBluetoothDevices.forEach { device ->
+                        Log.d(debugTag, "${device.name} is an UNPAIRED device, checking if it's a drone...")
+                        device.fetchUuidsWithSdp()
                     }
 
+                    fetchDronesFromPairedDevices()
                 }
                 BluetoothDevice.ACTION_UUID->{
                     Log.d(debugTag,"ACTION UUID")
 
                     val device = getBluetoothDeviceFromIntent(intent)
 
-                    intent.getParcelableArrayExtra(BluetoothDevice.EXTRA_UUID)?.forEach {
-                        if(it.toString().toUpperCase() == droneUUID){
-                            Log.d(debugTag,"${device?.name} is a drone (found in paired devices)!")
-                            if(!connectedToDrone()){
-                                doWithDevice(ConnectivityAction.CONNECT, device)
-                            }
+                    val UUIDs =intent.getParcelableArrayExtra(BluetoothDevice.EXTRA_UUID)
+
+                    Log.d(debugTag,"${device.name} UUIDs : $UUIDs")
+                    UUIDs?.forEach {
+                        Log.d(debugTag, "${device.name} : UUID : $it")
+                        if(deviceHasValidAttributes(device) && UUIDMatchesDroneUUID(it) && !connectedToDrone()){
+                            Log.d(debugTag,"${device?.name} is a drone adding it to the list of drones")
+
+                            addDeviceToDrones(device)
                         }
                     }
 
+                    numberOfCheckedDevices++
+
+                    if(numberOfCheckedDevices == ((discoveredBluetoothDevices).size) + (bluetoothAdapter?.bondedDevices)?.size!!){
+                            enableFindMyDrone()
+                    }
                 }
                 BluetoothDevice.ACTION_FOUND ->{
                     Log.d(debugTag, "ACTION_FOUND")
 
                     val device = getBluetoothDeviceFromIntent(intent)
 
-                    if(deviceHasValidAttributes(device))
-                        addDeviceToList(device)
+                    if(deviceHasValidAttributes(device) && !discoveredBluetoothDevices.contains(device))
+                        discoveredBluetoothDevices.add(device)
 
                 }
                 BluetoothDevice.ACTION_BOND_STATE_CHANGED ->{
@@ -136,6 +146,8 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
         }
     }
 
+    private fun UUIDMatchesDroneUUID(it: Parcelable) = it.toString().toUpperCase() == droneUUID
+
     private fun doWithDevice(action: ConnectivityAction, device: BluetoothDevice? = null){
         try {
                 when (action){
@@ -167,7 +179,9 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                         Log.d(debugTag,"Disconnected from $connectedDeviceName...")
 
                         requireActivity().runOnUiThread {
-                            Snackbar.make(requireActivity().findViewById(android.R.id.content), "Disconnected from $connectedDeviceName", Snackbar.LENGTH_SHORT).show()
+                            if(connectedDevice != null){
+                                Snackbar.make(requireActivity().findViewById(android.R.id.content), "Disconnected from $connectedDeviceName", Snackbar.LENGTH_SHORT).show()
+                            }
                         }
 
                         connectedDevice = null
@@ -184,32 +198,15 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
     private fun alreadyConnectedTo(device: BluetoothDevice?) =
             socket != null && socket?.isConnected == true && connectedDevice?.address == device?.address
 
-    private fun showMessageInDialog(message: String){
-        requireActivity().runOnUiThread {
-            val dialogBuilder = AlertDialog.Builder(context)
-            dialogBuilder.setMessage(message)
-            dialogBuilder.setCancelable(true)
-
-            dialogBuilder.setPositiveButton(
-                    "OK"
-            ) { dialog, _ -> dialog.cancel() }
-
-            val alertDialog = dialogBuilder.create()
-            alertDialog.show()
-        }
-    }
-
     private fun getBluetoothDeviceFromIntent(intent: Intent) =
         intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
 
     private fun deviceHasValidAttributes(device: BluetoothDevice) = device.name != null && device.address != null
 
-    private fun addDeviceToList(device: BluetoothDevice) {
-        if(!DataManager.devices.contains(BluetoothDeviceModel(device.name,device.address)))
+    private fun addDeviceToDrones(device: BluetoothDevice) {
+        if(!DataManager.drones.contains(BluetoothDeviceModel(device.name,device.address, deviceIsPaired(device))))
         {
-            DataManager.devices.add(BluetoothDeviceModel(device.name, device.address))
-
-            bluetoothDevices.add(device)
+            DataManager.drones.add(BluetoothDeviceModel(device.name, device.address, deviceIsPaired(device)))
 
             (items.adapter as BluetoothRecyclerAdapter).notifyDataSetChanged()
         }
@@ -220,7 +217,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
     override fun onClick(deviceAddress: String) {
         val device = bluetoothAdapter?.getRemoteDevice(deviceAddress)
 
-        doWithDevice(ConnectivityAction.PAIR,device)
+        doWithDevice(ConnectivityAction.CONNECT,device)
     }
 
     private fun pairDevice(device: BluetoothDevice) = device.createBond()
@@ -284,7 +281,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
         requireContext().registerReceiver(bluetoothReceiver, filter)
 
         search.setOnClickListener {
-            tryToAutoConnect()
+            fetchDrones()
 
             onButtonPressed()
         }
@@ -295,7 +292,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
         items.layoutManager = LinearLayoutManager(context)
 
-        val adapter = BluetoothRecyclerAdapter(this.requireContext(), DataManager.devices)
+        val adapter = BluetoothRecyclerAdapter(this.requireContext(), DataManager.drones)
         adapter.setListener(this)
 
         items.adapter = adapter
@@ -303,12 +300,14 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
     override fun onStart() {
         super.onStart()
-        tryToAutoConnect()
+        fetchDrones()
     }
 
-    private fun tryToAutoConnect() {
+    private fun fetchDrones() {
         GlobalScope.launch {
             disableFindMyDrone()
+
+            numberOfCheckedDevices = 0
 
             connectedDevice = null
 
@@ -316,24 +315,15 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
             checkIfBluetoothIsOn()
 
-            checkIfDroneInPairedDevices()
-
-            if(!connectedToDrone()){
-                showMessageInDialog("Couldn't find your drone in your paired devices, this means your drone is turned off or it's not paired yet. We will show you nearby devices, simply select your drone to pair it.")
-                launchDiscovery()
-            }
+            launchBluetoothDiscovery()
         }
     }
 
 
-    private fun checkIfDroneInPairedDevices(){
-        Log.d(debugTag, "Checking for paired devices")
+    private fun fetchDronesFromPairedDevices(){
+        Log.d(debugTag, "Checking for paired drones")
 
         cancelDiscoveryIfAlreadyInProgress()
-
-        requireActivity().runOnUiThread {
-            Toast.makeText(requireContext(), "Searching in paired devices...", Toast.LENGTH_SHORT).show()
-        }
 
         bluetoothAdapter?.bondedDevices?.forEach { device ->
             Log.d(debugTag, "${device.name} is a paired device, checking if it's a drone...")
@@ -341,8 +331,14 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
         }
     }
 
-    private fun launchDiscovery() {
+    private fun launchBluetoothDiscovery() {
         cancelDiscoveryIfAlreadyInProgress()
+
+        discoveredBluetoothDevices.clear()
+
+        requireActivity().runOnUiThread {
+            items.adapter?.notifyDataSetChanged()
+        }
 
         startDiscovery()
     }
@@ -367,8 +363,8 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
     }
 
     private fun disableFindMyDrone() {
-        DataManager.devices.clear()
-        bluetoothDevices.clear()
+        DataManager.drones.clear()
+        discoveredBluetoothDevices.clear()
 
         requireActivity().runOnUiThread {
             loadingSpinner.visibility = View.VISIBLE
@@ -408,7 +404,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == enableBluetoothRequestCode) {
             if (resultCode == RESULT_OK) {
-                launchDiscovery()
+                launchBluetoothDiscovery()
             }else{
                 enableFindMyDrone()
             }
