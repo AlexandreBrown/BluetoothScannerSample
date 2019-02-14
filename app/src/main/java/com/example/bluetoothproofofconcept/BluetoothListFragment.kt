@@ -80,8 +80,6 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
                         Log.d(debugTag, "${device.name} is an UNPAIRED device, checking if it's a drone...")
                         device.fetchUuidsWithSdp()
                     }
-
-                    fetchDronesFromPairedDevices()
                 }
                 BluetoothDevice.ACTION_UUID->{
                     Log.d(debugTag,"ACTION UUID")
@@ -102,7 +100,7 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
 
                     numberOfCheckedDevices++
 
-                    if(numberOfCheckedDevices == ((discoveredBluetoothDevices).size) + (bluetoothAdapter?.bondedDevices)?.size!!){
+                    if(numberOfCheckedDevices == ((discoveredBluetoothDevices).size) ){
                             enableFindMyDrone()
                     }
                 }
@@ -316,18 +314,6 @@ class BluetoothListFragment : Fragment(), OnBluetoothItemInteraction {
             checkIfBluetoothIsOn()
 
             launchBluetoothDiscovery()
-        }
-    }
-
-
-    private fun fetchDronesFromPairedDevices(){
-        Log.d(debugTag, "Checking for paired drones")
-
-        cancelDiscoveryIfAlreadyInProgress()
-
-        bluetoothAdapter?.bondedDevices?.forEach { device ->
-            Log.d(debugTag, "${device.name} is a paired device, checking if it's a drone...")
-            device.fetchUuidsWithSdp()
         }
     }
 
